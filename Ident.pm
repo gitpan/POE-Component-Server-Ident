@@ -7,7 +7,7 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '0.1';
+$VERSION = '0.2';
 
 use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
 
@@ -181,7 +181,7 @@ sub client_input {
     $kernel->delay ( 'client_default' => 10 );
   } else {
     # Client sent us rubbish.
-    $self->{clients}->{ $session->ID }->{readwrite}->put($input . " : ERROR : INVALID-PORT");
+    $self->{clients}->{ $session->ID }->{readwrite}->put("0 , 0 : ERROR : INVALID-PORT");
   }
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
 }
