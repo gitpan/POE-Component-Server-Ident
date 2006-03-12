@@ -1,33 +1,30 @@
 package POE::Component::Server::Ident;
 
 use strict;
+use warnings;
 use POE qw( Wheel::SocketFactory Wheel::ReadWrite Driver::SysRW
             Filter::Line );
 use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '0.2';
+$VERSION = '0.3';
 
 use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
 
 sub spawn {
-  my ($package) = shift;
-
+  my $package = shift;
   my ($alias,$bindaddr,$bindport,$multiple,$timeout) = _parse_arguments(@_);
 
-  unless ( $alias ) {
-	croak "You must specify an Alias to $package->spawn";
-  }
+  croak "You must specify an Alias to $package->spawn" unless $alias;
 
-  $bindport = 113 unless ( defined ( $bindport ) );
-  $multiple = 0 unless ( defined ( $multiple ) );
-  $timeout = 60 unless ( defined ( $timeout ) );
+  $bindport = 113 unless defined $bindport;
+  $multiple = 0 unless defined $multiple;
+  $timeout = 60 unless defined $timeout;
 
-  my ($self) = $package->new($alias,$bindaddr,$bindport,$multiple,$timeout);
+  my $self = $package->new($alias,$bindaddr,$bindport,$multiple,$timeout);
 
   POE::Session->create (
-	
 	object_states => [
 		$self => { _start     => 'server_start',
 			   _stop      => 'server_stop',
@@ -40,10 +37,10 @@ sub spawn {
 }
 
 sub new {
-  my ($package) = shift;
+  my $package = shift;
   my ($alias,$bindaddr,$bindport,$multiple,$timeout) = @_;
 
-  my ($self) = { };
+  my $self = { };
 
   $self->{Alias} = $alias;
   $self->{BindPort} = $bindport;
@@ -55,8 +52,7 @@ sub new {
 }
 
 sub getsockname {
-  my ($self) = shift;
-
+  my $self = shift;
   return $self->{listener}->getsockname();
 }
 
@@ -72,12 +68,13 @@ sub server_start {
 			SuccessEvent => 'accept_new_client',
 			FailureEvent => 'accept_failed',
                       );
+  undef;
 }
 
 sub server_stop {
   my ($kernel,$self) = @_[KERNEL,OBJECT];
-
   # Hmmm server stopped blah blah blah
+  undef;
 }
 
 sub server_close {
@@ -88,6 +85,7 @@ sub server_close {
   }
   delete ( $self->{listener} );
   $kernel->alias_remove( $self->{Alias} );
+  undef;
 }
 
 sub accept_new_client {
@@ -105,6 +103,7 @@ sub accept_new_client {
 	],
 	args => [ $socket, $peeraddr, $peerport ],
   );
+  undef;
 }
 
 sub accept_failed {
@@ -114,27 +113,34 @@ sub accept_failed {
   $kernel->call ( $self->{Alias} => 'shutdown' );
 
   warn "$package: call to $function() failed: $error";
+  undef;
 }
 
 sub register {
   my ($kernel,$self,$sender,$session) = @_[KERNEL,OBJECT,SENDER,SESSION];
+  $sender = $sender->ID();
+  $session = $session->ID();
 
   $self->{sessions}->{$sender}->{'ref'} = $sender;
   unless ($self->{sessions}->{$sender}->{refcnt}++ or $session == $sender) {
-      $kernel->refcount_increment($sender->ID(), PCSI_REFCOUNT_TAG);
+      $kernel->refcount_increment($sender, PCSI_REFCOUNT_TAG);
   }
+  undef;
 }
 
 
 sub unregister {
   my ($kernel,$self,$sender,$session) = @_[KERNEL,OBJECT,SENDER,SESSION];
+  $sender = $sender->ID();
+  $session = $session->ID();
 
   if (--$self->{sessions}->{$sender}->{refcnt} <= 0) {
       delete $self->{sessions}->{$sender};
       unless ($session == $sender) {
-        $kernel->refcount_decrement($sender->ID(), PCSI_REFCOUNT_TAG);
+        $kernel->refcount_decrement($sender, PCSI_REFCOUNT_TAG);
       }
   }
+  undef;
 }
 
 sub client_start {
@@ -156,13 +162,15 @@ sub client_start {
   # Set a delay to close the connection if we are idle for 60 seconds.
 
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} );
+  undef;
 }
 
 sub client_stop {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
 
   $kernel->delay ( 'client_timeout' => undef );
-  delete ( $self->{clients}->{ $session->ID } );
+  delete $self->{clients}->{ $session->ID };
+  undef;
 }
 
 sub client_input {
@@ -175,45 +183,46 @@ sub client_input {
     $self->{clients}->{ $session->ID }->{'Port1'} = $port1;
     $self->{clients}->{ $session->ID }->{'Port2'} = $port2;
     # Okay got a sort of valid query. Send it to all interested sessions.
-    foreach ( keys %{ $self->{sessions} } ) {
-	$kernel->call( $_ => 'identd_request' => $self->{clients}->{ $session->ID }->{PeerAddr} => $port1 => $port2 );
-    }
+    $kernel->call( $_ => 'identd_request' => $self->{clients}->{ $session->ID }->{PeerAddr} => $port1 => $port2 ) for keys %{ $self->{sessions} };
     $kernel->delay ( 'client_default' => 10 );
   } else {
     # Client sent us rubbish.
     $self->{clients}->{ $session->ID }->{readwrite}->put("0 , 0 : ERROR : INVALID-PORT");
   }
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
+  undef;
 }
 
 sub client_done {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
-
   $kernel->delay ( 'client_timeout' => undef );
-  delete ( $self->{clients}->{ $session->ID } );
+  delete $self->{clients}->{ $session->ID };
+  undef;
 }
 
 sub client_error {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
-
   $kernel->delay ( 'client_timeout' => undef );
-  delete ( $self->{clients}->{ $session->ID }->{readwrite} );
+  delete $self->{clients}->{ $session->ID }->{readwrite};
+  undef;
 }
 
 sub client_timeout {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
-
   $kernel->delay ( 'client_timeout' => undef );
   $kernel->delay ( 'client_default' => undef );
-  delete ( $self->{clients}->{ $session->ID }->{readwrite} );
+  delete $self->{clients}->{ $session->ID }->{readwrite};
+  undef;
 }
 
 sub add_connection {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
+  undef;
 }
 
 sub del_connection {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
+  undef;
 }
 
 sub client_default {
@@ -223,6 +232,7 @@ sub client_default {
 
   $self->{clients}->{ $session->ID }->{readwrite}->put($reply) if ( defined ( $self->{clients}->{ $session->ID }->{readwrite} ) );
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
+  undef;
 }
 
 sub ident_server_reply {
@@ -230,13 +240,14 @@ sub ident_server_reply {
 
   my ($opsys,$userid) = @_[ARG0 .. ARG1];
 
-  $opsys = "UNIX" unless ( defined ( $opsys ) );
+  $opsys = "UNIX" unless defined ( $opsys );
 
   my ($reply) = $self->{clients}->{ $session->ID }->{'Port1'} . " , " . $self->{clients}->{ $session->ID }->{'Port2'} . " : USERID : " . $opsys . " : " . $userid;
 
   $self->{clients}->{ $session->ID }->{readwrite}->put($reply);
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
   $kernel->delay ( 'client_default' => undef );
+  undef;
 }
 
 sub ident_server_error {
@@ -252,11 +263,12 @@ sub ident_server_error {
   $self->{clients}->{ $session->ID }->{readwrite}->put($reply);
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
   $kernel->delay ( 'client_default' => undef );
+  undef;
 }
 
 sub _parse_arguments {
   my %arguments = @_;
-  my (@returns);
+  my @returns;
 
   # Extra stuff here if we want it. Maybe.
   $returns[0] = $arguments{'Alias'};
