@@ -7,6 +7,7 @@ WriteMakefile(
 			  'PM'      => { 'Ident.pm' => '$(INST_LIBDIR)/Ident.pm',
 				       },
 			  'PREREQ_PM' => {
+							  'warnings' => 0,
 							  'POE'    => 0.06_07,
 							  'Carp'   => 0,
 							  'Socket' => 0,
