@@ -1,9 +1,8 @@
 use Test::More tests => 4;
-BEGIN { use_ok('POE::Component::Client::Ident') };
 
 use Socket;
 use POE qw(Wheel::SocketFactory Wheel::ReadWrite);
-use POE::Component::Server::Ident;
+use_ok( 'POE::Component::Server::Ident' );
 
 my $identd = POE::Component::Server::Ident->spawn ( Alias => 'Ident-Server', BindAddr => '127.0.0.1', BindPort => 0, Multiple => 1 );
 
