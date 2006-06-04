@@ -9,7 +9,7 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.00';
+$VERSION = '1.01';
 
 use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
 
@@ -248,9 +248,9 @@ sub ident_server_reply {
 
   $opsys = "UNIX" unless defined ( $opsys );
 
-  my $reply = $self->{clients}->{ $session->ID }->{'Port1'} . " , " . $self->{clients}->{ $session->ID }->{'Port2'} . " : USERID : " . $opsys . " : " . $userid;
+  my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'} . " : USERID : " . $opsys . " : " . $userid;
 
-  $self->{clients}->{ $session->ID }->{readwrite}->put($reply);
+  $self->{clients}->{ $session_id }->{readwrite}->put($reply) if $self->{clients}->{ $session_id }->{readwrite};
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
   $kernel->delay ( 'client_default' => undef );
   undef;
@@ -267,7 +267,7 @@ sub ident_server_error {
 
   my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'} . " : ERROR : " . $error_type;
 
-  $self->{clients}->{ $session_id }->{readwrite}->put($reply);
+  $self->{clients}->{ $session_id }->{readwrite}->put($reply) if $self->{clients}->{ $session_id }->{readwrite};
   $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if $self->{'Multiple'};
   $kernel->delay ( 'client_default' => undef );
   undef;
