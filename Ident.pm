@@ -9,13 +9,13 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.03';
+$VERSION = '1.04';
 
 use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
 
 sub spawn {
   my $package = shift;
-  my ($alias,$bindaddr,$bindport,$multiple,$timeout) = _parse_arguments(@_);
+  my ($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default) = _parse_arguments(@_);
 
   croak "You must specify an Alias to $package->spawn" unless $alias;
 
@@ -23,7 +23,7 @@ sub spawn {
   $multiple = 0 unless defined $multiple;
   $timeout = 60 unless defined $timeout;
 
-  my $self = $package->new($alias,$bindaddr,$bindport,$multiple,$timeout);
+  my $self = $package->new($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default);
 
   $self->{session_id} = POE::Session->create (
 	object_states => [
@@ -39,15 +39,17 @@ sub spawn {
 
 sub new {
   my $package = shift;
-  my ($alias,$bindaddr,$bindport,$multiple,$timeout) = @_;
+  my ($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default) = @_;
 
   my $self = { };
 
   $self->{Alias} = $alias;
   $self->{BindPort} = $bindport;
-  $self->{BindAddr} = $bindaddr unless ( not defined ( $bindaddr ) );
+  $self->{BindAddr} = $bindaddr if defined $bindaddr;
   $self->{'Multiple'} = $multiple;
   $self->{'TimeOut'} = $timeout;
+  $self->{'Random'} = $random;
+  $self->{'Default'} = $default;
 
   return bless $self, $package;
 }
@@ -129,8 +131,6 @@ sub register {
 
 sub unregister {
   my ($kernel,$self,$sender,$session) = @_[KERNEL,OBJECT,SENDER,SESSION];
-  $self->_unregister($session->ID(),$sender->ID());
-  undef;
 }
 
 sub _unregister {
@@ -233,10 +233,24 @@ sub client_default {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
   my $session_id = $session->ID();
 
-  my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'} . " : ERROR : HIDDEN-USER";
-
-  $self->{clients}->{ $session_id }->{readwrite}->put($reply) if defined ( $self->{clients}->{ $session_id }->{readwrite} );
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
+  my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'};
+  SWITCH: {
+    if ( $self->{'Default'} ) {
+	$reply .= " : USERID : UNIX : " . $self->{'Default'};
+	last SWITCH;
+    }
+    if ( $self->{'Random'} ) {
+    	srand( $session_id );
+    	my @numbers;
+    	push @numbers, int rand (26) for 1 .. 8;
+    	my $user_id = join '', map { chr($_+97) } @numbers;
+	$reply .= " : USERID : UNIX : $user_id";
+	last SWITCH;
+    }
+    $reply .= " : ERROR : HIDDEN-USER";
+  }
+  $self->{clients}->{ $session_id }->{readwrite}->put($reply) if defined $self->{clients}->{ $session_id }->{readwrite};
+  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if $self->{'Multiple'};
   undef;
 }
 
@@ -251,7 +265,7 @@ sub ident_server_reply {
   my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'} . " : USERID : " . $opsys . " : " . $userid;
 
   $self->{clients}->{ $session_id }->{readwrite}->put($reply) if $self->{clients}->{ $session_id }->{readwrite};
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
+  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if $self->{'Multiple'};
   $kernel->delay ( 'client_default' => undef );
   undef;
 }
@@ -283,6 +297,8 @@ sub _parse_arguments {
   $returns[2] = $arguments{'BindPort'} if ( defined ( $arguments{'BindPort'} ) and ( $arguments{'BindPort'} >= 0 and $arguments{'BindPort'} <= 65535 ) );
   $returns[3] = $arguments{'Multiple'} if ( defined ( $arguments{'Multiple'} ) and ( $arguments{'Multiple'} != 1 or $arguments{'Multiple'} == 0 ) );
   $returns[4] = $arguments{'TimeOut'} if ( defined ( $arguments{'TimeOut'} ) and ( $arguments{'TimeOut'} >= 30 and $arguments{'TimeOut'} <= 180 ) );
+  $returns[5] = $arguments{'Random'} || 0;
+  $returns[6] = $arguments{'Default'};
   return @returns;
 }
 
@@ -344,7 +360,8 @@ session. You may send back 'ident_server_reply' or 'ident_server_error' dependin
 sent.
 
 The component will automatically respond to the client requests with 'ERROR : HIDDEN-USER' if your 
-sessions do not send a reponse within a 10 second timeout period.
+sessions do not send a respond within a 10 second timeout period. This can be adjusted with 'Random'
+and 'Default' options to spawn().
 
 =head1 CONSTRUCTOR
 
@@ -363,6 +380,11 @@ Takes a number of arguments:
               client connections after a response has been sent;
   'TimeOut',  this is the idle timeout on client connections, default
               is 60 seconds, accepts values between 60 and 180 seconds.
+  'Default',  provide a default userid to return if your sessions don't provide a 
+              response.
+  'Random',   the component will generate a random userid string if your sessions 
+	      don't provide a response.
+  
 
 =back
 
