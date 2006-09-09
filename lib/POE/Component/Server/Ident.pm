@@ -9,7 +9,7 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.04';
+$VERSION = '1.05';
 
 use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
 
@@ -23,21 +23,22 @@ sub spawn {
   $multiple = 0 unless defined $multiple;
   $timeout = 60 unless defined $timeout;
 
-  my $self = $package->new($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default);
+  my $self = $package->_new($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default);
 
   $self->{session_id} = POE::Session->create (
 	object_states => [
-		$self => { _start     => 'server_start',
-			   _stop      => 'server_stop',
-			   'shutdown' => 'server_close',
+		$self => { _start     => '_server_start',
+			   _stop      => '_server_stop',
+			   'shutdown' => '_server_close',
+			   map { ( $_ => '_' . $_ ) } qw(accept_new_client accept_failed),
 			 },
-		$self => [ qw(add_connection del_connection accept_new_client accept_failed register unregister) ],
+		$self => [ qw(register unregister) ],
 	],
   )->ID();
   return $self;
 }
 
-sub new {
+sub _new {
   my $package = shift;
   my ($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default) = @_;
 
@@ -59,7 +60,7 @@ sub getsockname {
   return $self->{listener}->getsockname();
 }
 
-sub server_start {
+sub _server_start {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
 
   $kernel->alias_set( $self->{Alias} );
@@ -75,13 +76,13 @@ sub server_start {
   undef;
 }
 
-sub server_stop {
+sub _server_stop {
   my ($kernel,$self) = @_[KERNEL,OBJECT];
   # Hmmm server stopped blah blah blah
   undef;
 }
 
-sub server_close {
+sub _server_close {
   my ($kernel,$self) = @_[KERNEL,OBJECT];
   $kernel->alias_remove( $self->{Alias} );
   delete $self->{clients}->{ $_ }->{readwrite} for keys %{ $self->{clients} };
@@ -90,23 +91,24 @@ sub server_close {
   undef;
 }
 
-sub accept_new_client {
+sub _accept_new_client {
   my ($kernel,$self,$socket,$peeraddr,$peerport) = @_[KERNEL,OBJECT,ARG0 .. ARG2];
   $peeraddr = inet_ntoa($peeraddr);
 
   POE::Session->create (
 	object_states => [
-		$self => { _start => 'client_start',
-			   _stop  => 'client_stop',
+		$self => { _start => '_client_start',
+			   _stop  => '_client_stop',
+			   map { ( $_ => '_' . $_ ) } qw(client_input client_error client_done client_timeout client_default), 
 			 },
-		$self => [ qw(client_input client_error client_done client_timeout client_default ident_server_reply ident_server_error) ],
+		$self => [ qw(ident_server_reply ident_server_error) ],
 	],
 	args => [ $socket, $peeraddr, $peerport ],
   );
   undef;
 }
 
-sub accept_failed {
+sub _accept_failed {
   my ($kernel,$self,$function,$error) = @_[KERNEL,OBJECT,ARG0,ARG2];
   my $package = ref $self;
 
@@ -145,7 +147,7 @@ sub _unregister {
   undef;
 }
 
-sub client_start {
+sub _client_start {
   my ($kernel,$session,$self,$socket,$peeraddr,$peerport) = @_[KERNEL,SESSION,OBJECT,ARG0,ARG1,ARG2];
   my $session_id = $session->ID();
   
@@ -168,7 +170,7 @@ sub client_start {
   undef;
 }
 
-sub client_stop {
+sub _client_stop {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
 
   $kernel->delay ( 'client_timeout' => undef );
@@ -176,7 +178,7 @@ sub client_stop {
   undef;
 }
 
-sub client_input {
+sub _client_input {
   my ($kernel,$self,$session,$input) = @_[KERNEL,OBJECT,SESSION,ARG0];
   my $session_id = $session->ID();
 
@@ -197,21 +199,21 @@ sub client_input {
   undef;
 }
 
-sub client_done {
+sub _client_done {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
   $kernel->delay ( 'client_timeout' => undef );
   delete $self->{clients}->{ $session->ID };
   undef;
 }
 
-sub client_error {
+sub _client_error {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
   $kernel->delay ( 'client_timeout' => undef );
   delete $self->{clients}->{ $session->ID }->{readwrite};
   undef;
 }
 
-sub client_timeout {
+sub _client_timeout {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
   $kernel->delay ( 'client_timeout' => undef );
   $kernel->delay ( 'client_default' => undef );
@@ -219,17 +221,7 @@ sub client_timeout {
   undef;
 }
 
-sub add_connection {
-  my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
-  undef;
-}
-
-sub del_connection {
-  my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
-  undef;
-}
-
-sub client_default {
+sub _client_default {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
   my $session_id = $session->ID();
 
@@ -240,7 +232,7 @@ sub client_default {
 	last SWITCH;
     }
     if ( $self->{'Random'} ) {
-    	srand( $session_id );
+    	srand( $session_id * $$ );
     	my @numbers;
     	push @numbers, int rand (26) for 1 .. 8;
     	my $user_id = join '', map { chr($_+97) } @numbers;
@@ -385,6 +377,16 @@ Takes a number of arguments:
   'Random',   the component will generate a random userid string if your sessions 
 	      don't provide a response.
   
+
+=back
+
+=head1 METHODS
+
+=over
+
+=item getsockname
+
+Access to the L<POE::Wheel::SocketFactory> method of the underlying listening socket.
 
 =back
 

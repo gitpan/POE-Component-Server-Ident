@@ -1,0 +1,8 @@
+POE::Component::Server::Ident
+=============================
+
+1.2	Sat Sep  9 14:38:54 BST 2006
+	- Rearranged distribution structure.
+	- Added Changes file
+	- Added pod and pod coverage tests.
+	- Fixed pod and coverage.
