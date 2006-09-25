@@ -1,14 +1,16 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         POE-Component-Server-Ident
-version:      1.05
-version_from: lib/POE/Component/Server/Ident.pm
-installdirs:  site
-requires:
-    Carp:                          0
-    POE:                           0.0607
-    Socket:                        0
-    warnings:                      0
-
+author: 'Chris Williams <chris@bingosnet.co.uk>'
 distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.30
+generated_by: Module::Install version 0.64
+license: perl
+module_name: POE::Component::Server::Ident
+name: POE-Component-Server-Ident
+no_index:
+  directory:
+    - inc
+    - t
+requires:
+  Carp: 0
+  POE: 0.0607
+  Socket: 0
+  warnings: 0
+version: 1.06

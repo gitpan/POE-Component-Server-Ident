@@ -9,7 +9,7 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.05';
+$VERSION = '1.06';
 
 use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
 

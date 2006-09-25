@@ -1,4 +1,9 @@
-use ExtUtils::MakeMaker;
+#use ExtUtils::MakeMaker;
+
+use inc::Module::Install;
+
+author 'Chris Williams <chris@bingosnet.co.uk>';
+license 'perl';
 
 WriteMakefile(
 			  'NAME'	=> 'POE::Component::Server::Ident',

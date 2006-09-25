@@ -1,7 +1,10 @@
 POE::Component::Server::Ident
 =============================
 
-1.2	Sat Sep  9 14:38:54 BST 2006
+1.06	Mon Sep 25 15:31:42 BST 2006
+	- Switched to Module::Install
+
+1.05	Sat Sep  9 14:38:54 BST 2006
 	- Rearranged distribution structure.
 	- Added Changes file
 	- Added pod and pod coverage tests.
