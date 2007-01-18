@@ -1,6 +1,11 @@
 POE::Component::Server::Ident
 =============================
 
+1.07	Thu Jan 18 17:13:47 GMT 2006
+	- Makefile.PL fully M::I-ified.
+	- Major code tidying.
+	- session_id() method.
+
 1.06	Mon Sep 25 15:31:42 BST 2006
 	- Switched to Module::Install
 

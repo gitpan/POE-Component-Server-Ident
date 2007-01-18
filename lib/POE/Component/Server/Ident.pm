@@ -9,21 +9,19 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.06';
-
-use constant PCSI_REFCOUNT_TAG => "P::C::S::I registered";
+$VERSION = '1.07';
 
 sub spawn {
   my $package = shift;
-  my ($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default) = _parse_arguments(@_);
+  my %opts = @_;
+  $opts{lc $_} = delete $opts{$_} for keys %opts;
 
-  croak "You must specify an Alias to $package->spawn" unless $alias;
+  $opts{bindport} = 113 unless defined $opts{bindport};
+  $opts{multiple} = 0 unless $opts{multiple};
+  $opts{timeout} = 60 unless $opts{timeout};
+  $opts{random} = 0 unless $opts{random};
 
-  $bindport = 113 unless defined $bindport;
-  $multiple = 0 unless defined $multiple;
-  $timeout = 60 unless defined $timeout;
-
-  my $self = $package->_new($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default);
+  my $self = bless \%opts, $package;
 
   $self->{session_id} = POE::Session->create (
 	object_states => [
@@ -38,21 +36,8 @@ sub spawn {
   return $self;
 }
 
-sub _new {
-  my $package = shift;
-  my ($alias,$bindaddr,$bindport,$multiple,$timeout,$random,$default) = @_;
-
-  my $self = { };
-
-  $self->{Alias} = $alias;
-  $self->{BindPort} = $bindport;
-  $self->{BindAddr} = $bindaddr if defined $bindaddr;
-  $self->{'Multiple'} = $multiple;
-  $self->{'TimeOut'} = $timeout;
-  $self->{'Random'} = $random;
-  $self->{'Default'} = $default;
-
-  return bless $self, $package;
+sub session_id {
+  return $_[0]->{session_id};
 }
 
 sub getsockname {
@@ -62,32 +47,35 @@ sub getsockname {
 
 sub _server_start {
   my ($kernel,$self,$session) = @_[KERNEL,OBJECT,SESSION];
-
-  $kernel->alias_set( $self->{Alias} );
   $self->{session_id} = $session->ID();
 
+  $kernel->alias_set( $self->{alias} ) if $self->{alias};
+  $kernel->refcount_increment( $self->{session_id}, __PACKAGE__ ) unless $self->{alias};
+
   $self->{listener} = POE::Wheel::SocketFactory->new ( 
-			BindPort => $self->{BindPort},
-			( $self->{BindAddr} ? (BindAddr => $self->{BindAddr}) : () ),
+			BindPort => $self->{bindport},
+			( $self->{bindaddr} ? (BindAddr => $self->{bindaddr}) : () ),
 			Reuse => 'on',
 			SuccessEvent => 'accept_new_client',
 			FailureEvent => 'accept_failed',
-                      );
+  );
   undef;
 }
 
 sub _server_stop {
-  my ($kernel,$self) = @_[KERNEL,OBJECT];
   # Hmmm server stopped blah blah blah
   undef;
 }
 
 sub _server_close {
   my ($kernel,$self) = @_[KERNEL,OBJECT];
-  $kernel->alias_remove( $self->{Alias} );
-  delete $self->{clients}->{ $_ }->{readwrite} for keys %{ $self->{clients} };
+  #$kernel->alarm_remove_all();
+  $kernel->alias_remove( $_ ) for $kernel->alias_list();
+  $kernel->refcount_decrement( $self->{session_id}, __PACKAGE__ ) unless $self->{alias};
+  #delete $self->{clients}->{ $_ }->{readwrite} for keys %{ $self->{clients} };
+  $kernel->call( $_, 'client_timeout' ) for %{ $self->{clients} };
   delete $self->{listener};
-  $self->_unregister($self->{session_id},$_) for keys %{ $self->{sessions} };
+  $kernel->refcount_decrement( $_, __PACKAGE__ ) for keys %{ $self->{sessions} };
   undef;
 }
 
@@ -112,7 +100,7 @@ sub _accept_failed {
   my ($kernel,$self,$function,$error) = @_[KERNEL,OBJECT,ARG0,ARG2];
   my $package = ref $self;
 
-  $kernel->call ( $self->{Alias} => 'shutdown' );
+  $kernel->call ( $self->{session_id}, 'shutdown' );
 
   warn "$package: call to $function() failed: $error";
   undef;
@@ -123,35 +111,26 @@ sub register {
   $sender = $sender->ID();
   $session = $session->ID();
 
-  $self->{sessions}->{$sender}->{'ref'} = $sender;
-  unless ($self->{sessions}->{$sender}->{refcnt}++ or $session == $sender) {
-      $kernel->refcount_increment($sender, PCSI_REFCOUNT_TAG);
-  }
+  $self->{sessions}->{ $sender }++;
+  $kernel->refcount_increment( $sender => __PACKAGE__ )
+       if $self->{sessions}->{ $sender } == 1 and $sender ne $session;
   undef;
 }
 
 
 sub unregister {
   my ($kernel,$self,$sender,$session) = @_[KERNEL,OBJECT,SENDER,SESSION];
-}
-
-sub _unregister {
-  my ($self,$session,$sender) = splice @_,0,3;
-
-  if (--$self->{sessions}->{$sender}->{refcnt} <= 0) {
-      delete $self->{sessions}->{$sender};
-      unless ($session == $sender) {
-        $poe_kernel->refcount_decrement($sender, PCSI_REFCOUNT_TAG);
-      }
-  }
-  undef;
+  my $thing = delete $self->{sessions}->{ $sender };
+  $kernel->refcount_decrement( $sender => __PACKAGE__ )
+	if $thing and $sender ne $session;
+  return;
 }
 
 sub _client_start {
   my ($kernel,$session,$self,$socket,$peeraddr,$peerport) = @_[KERNEL,SESSION,OBJECT,ARG0,ARG1,ARG2];
   my $session_id = $session->ID();
   
-  $self->{clients}->{ $session_id }->{Socket} = $socket;
+  #$self->{clients}->{ $session_id }->{Socket} = $socket;
   $self->{clients}->{ $session_id }->{PeerAddr} = $peeraddr;
   $self->{clients}->{ $session_id }->{PeerPort} = $peerport;
 
@@ -161,12 +140,12 @@ sub _client_start {
 	Filter => POE::Filter::Line->new( Literal => "\x0D\x0A" ),
 	InputEvent => 'client_input',
 	ErrorEvent => 'client_error',
-	( $self->{'Multiple'} ? () : ( FlushedEvent => 'client_timeout' ) ),
+	( $self->{'multiple'} ? () : ( FlushedEvent => 'client_timeout' ) ),
   );
 
   # Set a delay to close the connection if we are idle for 60 seconds.
 
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} );
+  $kernel->delay ( 'client_timeout' => $self->{'timeout'} );
   undef;
 }
 
@@ -195,7 +174,7 @@ sub _client_input {
     # Client sent us rubbish.
     $self->{clients}->{ $session_id }->{readwrite}->put("0 , 0 : ERROR : INVALID-PORT");
   }
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if ( $self->{'Multiple'} );
+  $kernel->delay ( 'client_timeout' => $self->{'timeout'} ) if $self->{'multiple'};
   undef;
 }
 
@@ -227,11 +206,11 @@ sub _client_default {
 
   my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'};
   SWITCH: {
-    if ( $self->{'Default'} ) {
-	$reply .= " : USERID : UNIX : " . $self->{'Default'};
+    if ( $self->{'default'} ) {
+	$reply .= " : USERID : UNIX : " . $self->{'default'};
 	last SWITCH;
     }
-    if ( $self->{'Random'} ) {
+    if ( $self->{'random'} ) {
     	srand( $session_id * $$ );
     	my @numbers;
     	push @numbers, int rand (26) for 1 .. 8;
@@ -242,7 +221,7 @@ sub _client_default {
     $reply .= " : ERROR : HIDDEN-USER";
   }
   $self->{clients}->{ $session_id }->{readwrite}->put($reply) if defined $self->{clients}->{ $session_id }->{readwrite};
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if $self->{'Multiple'};
+  $kernel->delay ( 'client_timeout' => $self->{'timeout'} ) if $self->{'multiple'};
   undef;
 }
 
@@ -257,7 +236,7 @@ sub ident_server_reply {
   my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'} . " : USERID : " . $opsys . " : " . $userid;
 
   $self->{clients}->{ $session_id }->{readwrite}->put($reply) if $self->{clients}->{ $session_id }->{readwrite};
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if $self->{'Multiple'};
+  $kernel->delay ( 'client_timeout' => $self->{'timeout'} ) if $self->{'multiple'};
   $kernel->delay ( 'client_default' => undef );
   undef;
 }
@@ -274,35 +253,19 @@ sub ident_server_error {
   my $reply = $self->{clients}->{ $session_id }->{'Port1'} . " , " . $self->{clients}->{ $session_id }->{'Port2'} . " : ERROR : " . $error_type;
 
   $self->{clients}->{ $session_id }->{readwrite}->put($reply) if $self->{clients}->{ $session_id }->{readwrite};
-  $kernel->delay ( 'client_timeout' => $self->{'TimeOut'} ) if $self->{'Multiple'};
+  $kernel->delay ( 'client_timeout' => $self->{'timeout'} ) if $self->{'multiple'};
   $kernel->delay ( 'client_default' => undef );
   undef;
-}
-
-sub _parse_arguments {
-  my %arguments = @_;
-  my @returns;
-
-  # Extra stuff here if we want it. Maybe.
-  $returns[0] = $arguments{'Alias'};
-  $returns[1] = $arguments{'BindAddr'};
-  $returns[2] = $arguments{'BindPort'} if ( defined ( $arguments{'BindPort'} ) and ( $arguments{'BindPort'} >= 0 and $arguments{'BindPort'} <= 65535 ) );
-  $returns[3] = $arguments{'Multiple'} if ( defined ( $arguments{'Multiple'} ) and ( $arguments{'Multiple'} != 1 or $arguments{'Multiple'} == 0 ) );
-  $returns[4] = $arguments{'TimeOut'} if ( defined ( $arguments{'TimeOut'} ) and ( $arguments{'TimeOut'} >= 30 and $arguments{'TimeOut'} <= 180 ) );
-  $returns[5] = $arguments{'Random'} || 0;
-  $returns[6] = $arguments{'Default'};
-  return @returns;
 }
 
 sub _valid_ports {
   my ($port1,$port2) = @_;
 
-  if ( ( defined ( $port1 ) and defined ( $port2 ) ) and ( $port1 >= 1 and $port1 <= 65535 ) and ( $port2 >= 1 and $port2 <= 65535 ) ) {
-	return 1;
-  }
-
+  return 1 if ( defined ( $port1 ) and defined ( $port2 ) ) and ( $port1 >= 1 and $port1 <= 65535 ) and ( $port2 >= 1 and $port2 <= 65535 );
   return 0;
 }
+
+1;
 
 =head1 NAME
 
@@ -345,7 +308,7 @@ POE::Component::Server::Ident - A component that provides non-blocking ident ser
 POE::Component::Server::Ident is a POE ( Perl Object Environment ) component that provides 
 a non-blocking Identd for other components and POE sessions.
 
-Spawn the component, give it an alias and it will sit there waiting for Ident clients to connect.
+Spawn the component, give it an an optional lias and it will sit there waiting for Ident clients to connect.
 Register with the component to receive ident events. The component will listen for client connections.
 A valid ident request made by a client will result in an 'identd_server' event being sent to your 
 session. You may send back 'ident_server_reply' or 'ident_server_error' depending on what the client
@@ -383,6 +346,10 @@ Takes a number of arguments:
 =head1 METHODS
 
 =over
+
+=item session_id
+
+Retrieve the component's POE session ID.
 
 =item getsockname
 

@@ -1,18 +1,10 @@
-#use ExtUtils::MakeMaker;
-
 use inc::Module::Install;
-
+name 'POE-Component-Server-Ident';
 author 'Chris Williams <chris@bingosnet.co.uk>';
 license 'perl';
-
-WriteMakefile(
-			  'NAME'	=> 'POE::Component::Server::Ident',
-			  'PREREQ_PM' => {
-							  'warnings' => 0,
-							  'POE'    => 0.06_07,
-							  'Carp'   => 0,
-							  'Socket' => 0,
-							 },
-			  'VERSION_FROM' => 'lib/POE/Component/Server/Ident.pm',
-			  'dist' => { 'COMPRESS' => 'gzip --best' },
-			 );
+requires 'warnings' => 0;
+requires 'POE' => 0.38;
+requires 'Carp' => 0;
+requires 'Socket' => 0;
+version_from 'lib/POE/Component/Server/Ident.pm';
+WriteAll();
