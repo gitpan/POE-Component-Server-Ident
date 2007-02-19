@@ -12,4 +12,4 @@ requires:
   POE: 0.38
   Socket: 0
   warnings: 0
-version: 1.07
+version: 1.08

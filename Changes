@@ -1,6 +1,9 @@
 POE::Component::Server::Ident
 =============================
 
+1.08	Mon Feb 19 13:47:28 GMT 2007
+	- Added kwalitee test.
+
 1.07	Thu Jan 18 17:13:47 GMT 2006
 	- Makefile.PL fully M::I-ified.
 	- Major code tidying.
