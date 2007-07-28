@@ -1,7 +1,14 @@
+--- 
+abstract: A POE component that provides non-blocking ident services to your sessions.
 author: Chris Williams <chris@bingosnet.co.uk>
+build_requires: 
+  Test::More: 0.47
 distribution_type: module
-generated_by: Module::Install version 0.64
+generated_by: Module::Install version 0.67
 license: perl
+meta-spec: 
+  url: http://module-build.sourceforge.net/META-spec-v1.3.html
+  version: 1.3
 name: POE-Component-Server-Ident
 no_index: 
   directory: 
@@ -12,4 +19,4 @@ requires:
   POE: 0.38
   Socket: 0
   warnings: 0
-version: 1.08
+version: 1.09

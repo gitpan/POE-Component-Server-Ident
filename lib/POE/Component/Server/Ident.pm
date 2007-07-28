@@ -9,7 +9,7 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.08';
+$VERSION = '1.09';
 
 sub spawn {
   my $package = shift;
@@ -26,7 +26,6 @@ sub spawn {
   $self->{session_id} = POE::Session->create (
 	object_states => [
 		$self => { _start     => '_server_start',
-			   _stop      => '_server_stop',
 			   'shutdown' => '_server_close',
 			   map { ( $_ => '_' . $_ ) } qw(accept_new_client accept_failed),
 			 },
@@ -62,17 +61,10 @@ sub _server_start {
   undef;
 }
 
-sub _server_stop {
-  # Hmmm server stopped blah blah blah
-  undef;
-}
-
 sub _server_close {
   my ($kernel,$self) = @_[KERNEL,OBJECT];
-  #$kernel->alarm_remove_all();
   $kernel->alias_remove( $_ ) for $kernel->alias_list();
   $kernel->refcount_decrement( $self->{session_id}, __PACKAGE__ ) unless $self->{alias};
-  #delete $self->{clients}->{ $_ }->{readwrite} for keys %{ $self->{clients} };
   $kernel->call( $_, 'client_timeout' ) for %{ $self->{clients} };
   delete $self->{listener};
   $kernel->refcount_decrement( $_, __PACKAGE__ ) for keys %{ $self->{sessions} };
@@ -130,7 +122,6 @@ sub _client_start {
   my ($kernel,$session,$self,$socket,$peeraddr,$peerport) = @_[KERNEL,SESSION,OBJECT,ARG0,ARG1,ARG2];
   my $session_id = $session->ID();
   
-  #$self->{clients}->{ $session_id }->{Socket} = $socket;
   $self->{clients}->{ $session_id }->{PeerAddr} = $peeraddr;
   $self->{clients}->{ $session_id }->{PeerPort} = $peerport;
 
@@ -144,7 +135,6 @@ sub _client_start {
   );
 
   # Set a delay to close the connection if we are idle for 60 seconds.
-
   $kernel->delay ( 'client_timeout' => $self->{'timeout'} );
   undef;
 }
@@ -269,7 +259,7 @@ sub _valid_ports {
 
 =head1 NAME
 
-POE::Component::Server::Ident - A component that provides non-blocking ident services to your sessions.
+POE::Component::Server::Ident - A POE component that provides non-blocking ident services to your sessions.
 
 =head1 SYNOPSIS
 
@@ -305,7 +295,7 @@ POE::Component::Server::Ident - A component that provides non-blocking ident ser
 
 =head1 DESCRIPTION
 
-POE::Component::Server::Ident is a POE ( Perl Object Environment ) component that provides 
+POE::Component::Server::Ident is a L<POE> component that provides 
 a non-blocking Identd for other components and POE sessions.
 
 Spawn the component, give it an an optional lias and it will sit there waiting for Ident clients to connect.
@@ -406,6 +396,8 @@ note, that you send these responses to $_[SENDER] not the kernel alias of the co
 Chris Williams, E<lt>chris@bingosnet.co.ukE<gt>
 
 =head1 SEE ALSO
+
+L<POE>
 
 RFC 1413 L<http://www.faqs.org/rfcs/rfc1413.html>
 
