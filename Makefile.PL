@@ -6,7 +6,7 @@ version_from 'lib/POE/Component/Server/Ident.pm';
 abstract_from 'lib/POE/Component/Server/Ident.pm';
 build_requires 'Test::More' => 0.47;
 requires 'warnings' => 0;
-requires 'POE' => 0.38;
 requires 'Carp' => 0;
 requires 'Socket' => 0;
+requires 'POE' => 0.38;
 WriteAll();
