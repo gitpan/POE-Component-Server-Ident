@@ -77,7 +77,7 @@ sub _sock_down {
 sub _parseline {
   my ($kernel,$heap,$input) = @_[KERNEL,HEAP,ARG0];
   ok( $input =~ /UNIX/, "Got the reply" );
-  warn "$input\n";
+  warn "# $input\n";
   $kernel->post ( 'Ident-Server' => 'unregister' );
   $kernel->post ( 'Ident-Server' => 'shutdown' );
   delete $heap->{'socket'};

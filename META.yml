@@ -20,4 +20,4 @@ requires:
   POE: 0.38
   Socket: 0
   warnings: 0
-version: 1.10
+version: 1.12

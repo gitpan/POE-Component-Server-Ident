@@ -1,6 +1,9 @@
 POE::Component::Server::Ident
 =============================
 
+1.12	Fri Jan 18 15:46:38 GMT 2008
+	- Fixed test script naming
+
 1.10	Thu Nov  1 09:44:59 GMT 2007
 	- Updated Module::Install to 0.68
 
