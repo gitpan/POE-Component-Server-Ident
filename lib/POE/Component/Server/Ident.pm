@@ -9,7 +9,7 @@ use Carp;
 use Socket;
 use vars qw($VERSION);
 
-$VERSION = '1.12';
+$VERSION = '1.14';
 
 sub spawn {
   my $package = shift;
@@ -394,6 +394,12 @@ note, that you send these responses to $_[SENDER] not the kernel alias of the co
 =head1 AUTHOR
 
 Chris Williams, E<lt>chris@bingosnet.co.ukE<gt>
+
+=head1 LICENSE
+
+Copyright (C) Chris Williams
+
+This module may be used, modified, and distributed under the same terms as Perl itself. Please see the license that came with your Perl distribution for details.
 
 =head1 SEE ALSO
 

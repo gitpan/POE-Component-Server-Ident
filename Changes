@@ -1,6 +1,9 @@
 POE::Component::Server::Ident
 =============================
 
+1.14	Tue Jul  1 08:42:49 BST 2008
+	- Added LICENSE information.
+
 1.12	Fri Jan 18 15:46:38 GMT 2008
 	- Fixed test script naming
 
